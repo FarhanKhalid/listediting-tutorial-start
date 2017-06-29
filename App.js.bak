@@ -1,0 +1,362 @@
+
+import React, { Component } from 'react';
+import { connect } from 'react-redux';
+import {
+    Container, Header, Title, Content, Text,
+    Button, Icon, Left, Right, Body, Badge,
+    List, ListItem, Fab, IconNB, CheckBox, Footer, FooterTab, Input,
+    Segment
+} from 'native-base';
+import { Modal, TouchableHighlight, TouchableWithoutFeedback, Animated, Image, 
+    View, ListView, RefreshControl, Alert } from 'react-native';
+
+import styles from './styles/styles';
+
+var taskArray = [];
+var currentUserId = 0;
+
+class App extends React.Component {
+    constructor(props) {
+        super(props);
+
+        var dataSource = new ListView.DataSource({ rowHasChanged: (r1, r2) => r1.Id != r2.Id });
+        this.state = {
+            tasks: taskArray,
+            taskCheckedStatus: false,
+            dataSource: dataSource.cloneWithRows(taskArray),
+            isLoading: true,
+            refreshing: false,
+            toggleMode: false,
+            checkBoxAnimation: new Animated.Value(-50),
+            checkBoxAnimation2: new Animated.Value(30),
+            segmentAnimation: new Animated.Value(0),
+            segmentAnimation2: new Animated.Value(0),
+            showWorkflowModal: false
+        }
+    }
+
+    componentDidMount() {
+        this.getTaskList();
+    }
+
+    findTaskIndex(taskId) {
+        let { tasks } = this.state;
+        for (var i = 0; i < tasks.length; i++) {
+            if (tasks[i].Id === taskId) {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    async getTaskList() {
+        try {
+          this.getTheData(function (json) {
+              taskArray = json.Tasks;
+              taskArray = taskArray.map((data) => {
+                  var o = Object.assign({}, data);
+                  o.isChecked = false;
+                  return o;
+              });
+              this.setState({
+                  tasks: taskArray,
+                  dataSource: this.state.dataSource.cloneWithRows(taskArray),
+                  isLoading: false,
+                  refreshing: false
+              })
+          }.bind(this));
+            
+        } catch (error) {
+            console.log("There was an error getting the tasks");
+        }
+    }
+
+    getTheData(callback) {
+        // example usage of props when passing data!
+        var url = "http://localhost:8086/ws2/projects/taskssample";
+        fetch(url).then(response => response.json())
+            .then(json => callback(json))
+            .catch(error => console.log(error));
+    }
+
+    getAuthorInfo(data) {
+        if (data.CreatedById > 0) {
+            return (
+                <View style={styles.metaWrapper}>
+                    <Icon style={styles.userIcon} name="ios-person" />
+                    <Text style={styles.metaItem}>{data.CreatedByName}</Text>
+                </View>
+            );
+        } else {
+            return null;
+        }
+    }
+
+    getWorkflowInfo(data) {
+        if (data.WorkflowId > 0) {
+            return (
+                <Badge style={styles.workflowBadge}>
+                    <Text style={styles.workflowBadgeText}>{data.WorkflowName}</Text>
+                </Badge>
+            );
+        } else {
+            return null;
+        }
+    }
+
+    _onRefresh() {
+        this.setState({ refreshing: true });
+        this.getTheData(function (json) {
+            taskArray = json.Tasks;
+            this.setState({
+                tasks: taskArray,
+                dataSource: this.state.dataSource.cloneWithRows(taskArray),
+                refreshing: false
+            })
+        }.bind(this));
+    }
+
+    toggleWorkflowSelection() {
+        this.setState({
+            showWorkflowModal: !this.state.showWorkflowModal
+        })
+    }
+
+    toggleEditMode() {
+        if (!this.state.toggleMode) {
+            Animated.timing(
+                this.state.checkBoxAnimation,
+                {
+                    toValue: 0,
+                    duration: 300
+                }
+            ).start();
+            Animated.timing(
+                this.state.checkBoxAnimation2,
+                {
+                    toValue: 0,
+                    duration: 300
+                }
+            ).start();
+            Animated.timing(
+                this.state.segmentAnimation,
+                {
+                    toValue: 45,
+                    duration: 300
+                }
+            ).start();
+            Animated.timing(
+                this.state.segmentAnimation2,
+                {
+                    toValue: 1,
+                    duration: 300
+                }
+            ).start();
+        } else {
+            Animated.timing(
+                this.state.checkBoxAnimation,
+                {
+                    toValue: -50,
+                    duration: 300
+                }
+            ).start();
+            Animated.timing(
+                this.state.checkBoxAnimation2,
+                {
+                    toValue: 30,
+                    duration: 300
+                }
+            ).start();
+            Animated.timing(
+                this.state.segmentAnimation,
+                {
+                    toValue: 0,
+                    duration: 300
+                }
+            ).start();
+            Animated.timing(
+                this.state.segmentAnimation2,
+                {
+                    toValue: 0,
+                    duration: 300
+                }
+            ).start();
+        }
+
+        this.state.toggleMode = !this.state.toggleMode;
+    }
+
+    toggleCheckForTask(taskId) {
+        var foundIndex = this.findTaskIndex(taskId);
+        var newTasks = this.state.tasks;
+        newTasks[foundIndex].isChecked = !newTasks[foundIndex].isChecked;
+
+        var newDataSource = new ListView.DataSource({ rowHasChanged: (r1, r2) => r1.Id != r2.Id });
+
+        this.setState({
+            tasks: newTasks,
+            dataSource: newDataSource.cloneWithRows(newTasks)
+        });
+    }
+
+    deleteTasks() {
+        // Todo: delete tasks at this point
+    }
+
+    confirmTaskDeletion() {
+        Alert.alert(
+            'Delete tasks?',
+            'Are you sure you want to delete your selected tasks?',
+            [
+                {text: 'Confirm', onPress: () => this.deleteTasks()},
+                {text: 'Cancel', style: 'cancel'}
+            ],
+            { cancelable: true }
+        )
+    }
+
+    renderRow(rowData, sectionId, rowId) {
+        let { checkBoxAnimation } = this.state;
+        let { checkBoxAnimation2 } = this.state;
+        return (
+            <ListItem onPress={() => Actions.taskList()} style={styles.listItemWrapper}>
+                <Animated.View style={{ ...this.props.style, marginLeft: checkBoxAnimation, marginRight: checkBoxAnimation2 }}>
+                    <CheckBox color={'#000'} checked={rowData.isChecked} onPress={() => this.toggleCheckForTask(rowData.Id)} />
+                </Animated.View>
+                <Body style={{ marginLeft: 10 }}>
+                    <Text style={styles.taskTitle}>{rowData.Description}</Text>
+                    <View style={styles.metaWrapper}>
+                        {this.getWorkflowInfo(rowData)}
+                        {this.getAuthorInfo(rowData)}
+                        <Text style={styles.taskDate}>{rowData.CreatedOn}</Text>
+                    </View>
+                </Body>
+
+                <Right>
+                    <Text style={styles.taskEffort}>{rowData.Effort}</Text>
+                </Right>
+            </ListItem>
+        );
+    }
+
+    renderWorkflowRow(rowData, sectionId, rowId) {
+        let rowColor = (rowId == 0) ? '#999': '#009900';
+        return (
+            <ListItem>
+                <Body>
+                    <Text style={{color: rowColor}}>{rowData.name}</Text>
+                </Body>
+            </ListItem>
+        );
+    }
+
+    render() {
+        let currentView = <View />;
+        if (this.state.isLoading) {
+            currentView = <View />;
+        } else {
+            if (this.state.tasks.length == 0) {
+                currentView = <View>
+                    <Text style={styles.noContent}>Welcome to your new project!</Text>
+                    <Text style={styles.noContent}>Create a few tasks to get started.</Text>
+                    <Text style={styles.noContent}></Text>
+                    <View style={styles.noContentRow}>
+                        <Button transparent><Text style={styles.noContentBlack}>Share this project</Text></Button><Text style={styles.noContentButtonTextMargined}>to add tasks together.</Text>
+                    </View>
+                    <View style={styles.noContentRow}>
+                        <Text style={styles.noContentButtonText}>Use</Text>
+                        <Button transparent style={{ marginLeft: -10 }}><Text style={styles.noContentBlack}>workflows</Text></Button>
+                        <Text style={styles.noContentButtonTextMargined}> to change the state</Text>
+                    </View>
+                    <Text style={styles.noContentTopMargin}>of your tasks.</Text>
+                </View>;
+            } else {
+                currentView = <ListView style={styles.taskListView}
+                    dataSource={this.state.dataSource} renderRow={this.renderRow.bind(this)}
+                    enableEmptySections={true}
+                />;
+            }
+
+        }
+
+        let { segmentAnimation, segmentAnimation2 } = this.state;
+
+        let datas = [{
+            name: 'In progress',
+            id: 1
+        }, 
+        {
+            name: 'Done',
+            id: 2
+        }, 
+        {
+            name: 'Paid',
+            id: 3
+        }, 
+        {
+            name: 'Something',
+            id: 4
+        }, 
+        {
+            name: 'Else',
+            id: 5
+        }];
+
+        return (
+            <Container style={styles.container}>
+                <Header>
+                    <Left style={{ flexDirection: 'row' }}>
+                        <Button transparent onPress={() => Actions.pop()}>
+                            <Icon name="ios-arrow-back" style={{ color: '#009900' }} />
+                        </Button>
+                        <Title style={styles.projectTitle}>{this.props.projectName}</Title>
+                    </Left>
+
+                    <Right>
+                        <Button transparent onPress={() => this.toggleEditMode()}>
+                            <Text style={{ color: '#009900' }}>Edit</Text>
+                        </Button>
+                    </Right>
+                </Header>
+                <Animated.View style={{ ...this.props.style, height: segmentAnimation, opacity: segmentAnimation2 }}>
+                    <Segment>
+                        <Button onPress={() => this.toggleWorkflowSelection()} style={{ borderColor: 'transparent' }}><Text style={{ color: '#009900' }}>Workflow</Text></Button>
+                        <Button onPress={() => this.confirmTaskDeletion()} style={{ borderColor: 'transparent' }}><Text style={{ color: '#009900' }}>Delete</Text></Button>
+                        <Button style={{ borderColor: 'transparent' }}><Text style={{ color: '#009900' }}>Select All</Text></Button>
+                    </Segment>
+                </Animated.View>
+
+                <Content refreshControl={<RefreshControl refreshing={this.state.refreshing} onRefresh={this._onRefresh.bind(this)} />}>
+                    {currentView}
+                </Content>
+
+                <Fab
+                    direction="up"
+                    containerStyle={{}}
+                    style={{ backgroundColor: '#009900' }}
+                    position="bottomRight"
+                    onPress={() => Actions.composeTask()}
+                >
+                    <IconNB name="md-add" />
+
+                </Fab>
+
+                <Modal visible={this.state.showWorkflowModal} transparent={true} animationType={"slide"} onRequestClose={() => console.log('Modal requested close')}>
+                    <View style={{...styles.workflowOverlay }}>
+                        <Text style={styles.workflowOverlayTitle}>Select Workflow</Text>
+                        <List dataArray={datas} style={{ height: 260 }} renderRow={(data, sectionId, rowId) => this.renderWorkflowRow(data, sectionId, rowId)}  />
+                        <View style={{flexDirection: 'row'}}>
+                            <Button style={styles.workflowButton} color={'#009900'}><Text style={{color: 'white'}}>Done</Text></Button>
+                            <Button onPress={() => this.toggleWorkflowSelection()} style={styles.workflowButton} transparent><Text style={{color: '#777'}}>Cancel</Text></Button>
+                        </View>
+                    </View>
+                </Modal>
+                
+            </Container>
+        );
+    }
+}
+
+
+export default App;
